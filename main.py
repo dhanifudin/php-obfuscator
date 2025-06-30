@@ -59,6 +59,17 @@ def obfuscate_php(input_file, obfuscation_options, create_backup, output_directo
 def obfuscate_file(args):
     input_file, obfuscation_options, create_backup, output_directory, no_rename = args
     obfuscate_php(input_file, obfuscation_options, create_backup, output_directory, no_rename)
+    
+def copy_file(input_file, output_directory):
+    """Copy a file to the output directory."""
+    try:
+        if not os.path.exists(output_directory):
+            os.makedirs(output_directory)
+        shutil.copy2(input_file, output_directory)
+        logging.info(f"Copied {input_file} to {output_directory}")
+    except Exception as e:
+        logging.error(f"Error copying {input_file} to {output_directory}: {e}")
+        print(f"{RED}Error copying {input_file} to {output_directory}: {e}{RESET}")
 
 def process_directory(directory, obfuscation_options, exclude_list, create_backup, output_directory, no_rename, max_workers=4):
     total_files = sum(len(files) for _, _, files in os.walk(directory) if any(f.lower().endswith(".php") for f in files))
@@ -68,18 +79,19 @@ def process_directory(directory, obfuscation_options, exclude_list, create_backu
     file_list = []
     for root, _, files in os.walk(directory):
         for file in files:
+            input_file = os.path.join(root, file)
+            # Calculate the target directory in the output structure
+            relative_path = os.path.relpath(root, directory)
+            target_directory = os.path.join(output_directory, relative_path)
             if file.lower().endswith(".php"):
-                input_file = os.path.join(root, file)
-
                 if any(os.path.commonpath([input_file, exclude]) == os.path.abspath(exclude) for exclude in exclude_list):
+                    copy_file(input_file, target_directory)
                     logging.info(f"Skipping {input_file}: excluded")
                     continue
 
-                # Calculate the target directory in the output structure
-                relative_path = os.path.relpath(root, directory)
-                target_directory = os.path.join(output_directory, relative_path)
-
                 file_list.append((input_file, obfuscation_options, create_backup, target_directory, no_rename))
+            else:
+                copy_file(input_file, target_directory)
 
     progress_bar = tqdm(total=len(file_list), desc="Obfuscating", unit="file")
 
@@ -131,8 +143,9 @@ def main():
 
     if args.output is None:
         args.output = input(f"{GREEN}Enter the output directory path: {RESET}")
-        if not os.path.exists(args.output):
-            os.makedirs(args.output)
+
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
 
     if args.exclude_list is None:
         exclude_input = input(f"{GREEN}Enter file or directory paths to exclude (separated by a comma) (you can skip this step): {RESET}")
