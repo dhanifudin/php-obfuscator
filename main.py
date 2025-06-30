@@ -57,10 +57,10 @@ def obfuscate_php(input_file, obfuscation_options, create_backup, output_directo
         print(f"{RED}Error while obfuscating {input_file}: {e}{RESET}")
 
 def obfuscate_file(args):
-    input_file, obfuscation_options, create_backup, output_directory = args
-    obfuscate_php(input_file, obfuscation_options, create_backup, output_directory)
+    input_file, obfuscation_options, create_backup, output_directory, no_rename = args
+    obfuscate_php(input_file, obfuscation_options, create_backup, output_directory, no_rename)
 
-def process_directory(directory, obfuscation_options, exclude_list, create_backup, output_directory, max_workers=4):
+def process_directory(directory, obfuscation_options, exclude_list, create_backup, output_directory, no_rename, max_workers=4):
     total_files = sum(len(files) for _, _, files in os.walk(directory) if any(f.lower().endswith(".php") for f in files))
 
     progress_bar = tqdm(total=total_files, desc="Obfuscating", unit="file")
@@ -79,7 +79,7 @@ def process_directory(directory, obfuscation_options, exclude_list, create_backu
                 relative_path = os.path.relpath(root, directory)
                 target_directory = os.path.join(output_directory, relative_path)
 
-                file_list.append((input_file, obfuscation_options, create_backup, target_directory))
+                file_list.append((input_file, obfuscation_options, create_backup, target_directory, no_rename))
 
     progress_bar = tqdm(total=len(file_list), desc="Obfuscating", unit="file")
 
