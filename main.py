@@ -1,3 +1,4 @@
+import argparse
 import sys
 import os
 import logging
@@ -30,7 +31,7 @@ def get_obfuscation_options():
 
     return options
 
-def obfuscate_php(input_file, obfuscation_options, create_backup, output_directory):
+def obfuscate_php(input_file, obfuscation_options, create_backup, output_directory, no_rename=False):
     if create_backup:
         backup_file = f"{os.path.splitext(input_file)[0]}_backup.php"
         shutil.copy2(input_file, backup_file)
@@ -40,7 +41,8 @@ def obfuscate_php(input_file, obfuscation_options, create_backup, output_directo
         # Create the directory if it doesn't exist
         os.makedirs(output_directory, exist_ok=True)
 
-        output_file = os.path.join(output_directory, f"obfuscated_{os.path.basename(input_file)}")
+        prefix = "" if no_rename else "obfuscated_"
+        output_file = os.path.join(output_directory, f"{prefix}{os.path.basename(input_file)}")
         logging.info(f"Obfuscating {input_file}")
 
         # Use shlex.quote to handle paths with spaces or special characters
@@ -105,37 +107,57 @@ def validate_directory_input(directory_path):
         sys.exit(1)
 
 def main():
-    print(f"{YELLOW}Welcome to the PHP Obfuscator!{RESET}")
-    print(f"{YELLOW}Follow the prompts to obfuscate your PHP files.\n{RESET}")
+    parser = argparse.ArgumentParser(description="PHP Obfuscator using YakPro-Po")
+    parser.add_argument('--mode', type=int, choices=[1, 2, 3], help="Mode of operation: 1 for single file, 2 for multiple files, 3 for directory")
+    parser.add_argument('--output', type=str, help="Output directory for obfuscated files")
+    parser.add_argument('--exclude-list', nargs='*', help="File or directory paths to exclude from obfuscation")
+    parser.add_argument('--obfuscation-options', nargs='*', choices=OB_OPTIONS.values(), help="Obfuscation options to apply")
+    parser.add_argument('--skip-obfuscation-options', action='store_true',  help="Skip obfuscation options prompt")
+    parser.add_argument('--no-rename', action='store_true', help="Do not rename obfuscated files")
+    parser.add_argument('--create-backup', action='store_true', help="Create backups of original PHP files")
+    parser.add_argument('--no-backup', action='store_true', help="Do not create backups of original PHP files")
+    parser.add_argument('--input-directory', type=str, help="Input directory for obfuscating all PHP files in a project")
+    args = parser.parse_args()
+    
+    if args.mode is None:
+        print(f"{YELLOW}Welcome to the PHP Obfuscator!{RESET}")
+        print(f"{YELLOW}Follow the prompts to obfuscate your PHP files.\n{RESET}")
 
-    print(f"{GREEN}Choose the mode for obfuscating your PHP files:{RESET}")
-    print(f"{BLUE}1: Single file{RESET}")
-    print(f"{BLUE}2: Multiple files{RESET}")
-    print(f"{BLUE}3: Entire project directory{RESET}")
-    mode = validate_mode_input(input(f"{GREEN}Enter the mode number (1/2/3): {RESET}"))
+        print(f"{GREEN}Choose the mode for obfuscating your PHP files:{RESET}")
+        print(f"{BLUE}1: Single file{RESET}")
+        print(f"{BLUE}2: Multiple files{RESET}")
+        print(f"{BLUE}3: Entire project directory{RESET}")
+        args.mode = validate_mode_input(input(f"{GREEN}Enter the mode number (1/2/3): {RESET}"))
 
-    output_directory = input(f"{GREEN}Enter the output directory path: {RESET}")
-    if not os.path.exists(output_directory):
-        os.makedirs(output_directory)
+    if args.output is None:
+        args.output = input(f"{GREEN}Enter the output directory path: {RESET}")
+        if not os.path.exists(args.output):
+            os.makedirs(args.output)
 
-    exclude_input = input(f"{GREEN}Enter file or directory paths to exclude (separated by a space) (you can skip this step): {RESET}")
-    exclude_list = [os.path.abspath(exclude.strip()) for exclude in exclude_input.split()]
+    if args.exclude_list is None:
+        exclude_input = input(f"{GREEN}Enter file or directory paths to exclude (separated by a comma) (you can skip this step): {RESET}")
+        args.exclude_list = [os.path.abspath(exclude.strip()) for exclude in exclude_input.split()]
+    else:
+        args.exclude_list = [os.path.abspath(exclude) for exclude in args.exclude_list]
 
-    create_backup = input(f"{GREEN}Create backups of original PHP files? (y/n): {RESET}").lower() == 'y'
+    if args.create_backup is None or args.no_backup is None:
+        args.create_backup = input(f"{GREEN}Create backups of original PHP files? (y/n): {RESET}").lower() == 'y'
+    else:
+        args.create_backup = not args.no_backup
 
-    obfuscation_options = get_obfuscation_options()
+    obfuscation_options = [] if args.skip_obfuscation_options else get_obfuscation_options()
 
-    if mode == 1:
+    if args.mode == 1:
         input_file = input(f"{GREEN}Enter the PHP file path: {RESET}")
         if not input_file.lower().endswith(".php") or not os.path.isfile(input_file):
             logging.warning("Invalid PHP file path")
             print(f"{RED}Invalid PHP file path{RESET}")
             sys.exit(1)
-        if any(os.path.commonpath([input_file, exclude]) == os.path.abspath(exclude) for exclude in exclude_list):
+        if any(os.path.commonpath([input_file, exclude]) == os.path.abspath(exclude) for exclude in args.exclude_list):
             logging.info(f"Skipping {input_file}: excluded")
         else:
-            obfuscate_php(input_file, obfuscation_options, create_backup, output_directory)
-    elif mode == 2:
+            obfuscate_php(input_file, obfuscation_options, args.create_backup, args.output, args.no_rename)
+    elif args.mode == 2:
         file_paths = input(f"{GREEN}Enter the PHP file paths separated by a space: {RESET}")
         files = file_paths.split()
 
@@ -144,11 +166,12 @@ def main():
                 logging.warning(f"Skipping {input_file}: not a valid PHP file")
                 print(f"{RED}Skipping {input_file}: not a valid PHP file{RESET}")
                 continue
-            obfuscate_php(input_file, obfuscation_options, create_backup, output_directory)
-    elif mode == 3:
-        input_directory = input(f"{GREEN}Enter the project directory path: {RESET}")
-        validate_directory_input(input_directory)
-        process_directory(input_directory, obfuscation_options, exclude_list, create_backup, output_directory)
+            obfuscate_php(input_file, obfuscation_options, args.create_backup, args.output, args.no_rename)
+    elif args.mode == 3:
+        if args.input_directory is None:
+            args.input_directory = input(f"{GREEN}Enter the project directory path: {RESET}")
+        validate_directory_input(args.input_directory)
+        process_directory(args.input_directory, obfuscation_options, args.exclude_list, args.create_backup, args.output, args.no_rename)
     else:
         logging.warning("Invalid mode. Choose from: 1, 2, or 3")
         print(f"{RED}Invalid mode. Choose from: 1, 2, or 3{RESET}")
